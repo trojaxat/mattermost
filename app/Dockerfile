@@ -44,4 +44,5 @@ USER mattermost
 COPY entrypoint.sh /
 ENTRYPOINT ["/entrypoint.sh"]
 WORKDIR /mattermost
+EXPOSE 8065
 CMD ["mattermost", "--config", "/tmp/config.json"]
