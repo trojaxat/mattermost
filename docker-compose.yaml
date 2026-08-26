@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mattermost
+      POSTGRES_USER: mattermost
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mattermost -d mattermost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    build:
+      context: ./minio
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      - minio
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000
+      $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do
+        echo 'Waiting for MinIO...';
+        sleep 3;
+      done;
+      mc mb --ignore-existing local/mattermost;
+      exit 0;
+      "
+
+  mattermost:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: postgres://mattermost:${POSTGRES_PASSWORD}@postgres:5432/mattermost?sslmode=disable&connect_timeout=10
+
+      MM_FILESETTINGS_DRIVERNAME: amazons3
+      MM_FILESETTINGS_AMAZONS3BUCKET: mattermost
+      MM_FILESETTINGS_AMAZONS3ACCESSKEYID: ${MINIO_ACCESS_KEY}
+      MM_FILESETTINGS_AMAZONS3SECRETACCESSKEY: ${MINIO_SECRET_KEY}
+      MM_FILESETTINGS_AMAZONS3ENDPOINT: minio:9000
+      MM_FILESETTINGS_AMAZONS3SSL: "false"
+
+      MM_SERVICESETTINGS_SITEURL: ${MATTERMOST_SITE_URL}
+    expose:
+      - "8065"
+    volumes:
+      - mattermost_config:/mattermost/config
+      - mattermost_data:/mattermost/data
+      - mattermost_logs:/mattermost/logs
+      - mattermost_plugins:/mattermost/plugins
+      - mattermost_client_plugins:/mattermost/client/plugins
+      - mattermost_bleve:/mattermost/bleve-indexes
+
+volumes:
+  postgres_data:
+  minio_data:
+  mattermost_config:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_plugins:
+  mattermost_client_plugins:
+  mattermost_bleve:
