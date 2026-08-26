@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       MM_SQLSETTINGS_DRIVERNAME: postgres
-      MM_SQLSETTINGS_DATASOURCE: postgres://mattermost:${POSTGRES_PASSWORD}@zhujynremvhe39q7wlxr7cj5:5432/mattermost?sslmode=disable&connect_timeout=10
+      MM_SQLSETTINGS_DATASOURCE: postgres://mattermost:${POSTGRES_PASSWORD}@10.0.1.5:5432/mattermost?sslmode=disable&connect_timeout=10
     ports:
       - "8065:8065"
     volumes:
